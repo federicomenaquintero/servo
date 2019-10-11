@@ -29,6 +29,7 @@ use ipc_channel::ipc::IpcSender;
 use servo_url::ServoUrl;
 use std::mem;
 
+
 // https://html.spec.whatwg.org/multipage/#canvasrenderingcontext2d
 #[dom_struct]
 pub struct CanvasRenderingContext2D {
