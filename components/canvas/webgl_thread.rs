@@ -79,6 +79,7 @@ struct GLContextData {
 }
 
 pub struct GLState {
+    webgl_version: WebGLVersion,
     gl_version: GLVersion,
     clear_color: (f32, f32, f32, f32),
     scissor_test_enabled: bool,
@@ -93,6 +94,7 @@ impl Default for GLState {
     fn default() -> GLState {
         GLState {
             gl_version: GLVersion { major: 1, minor: 0 },
+            webgl_version: WebGLVersion::WebGL1,
             clear_color: (0., 0., 0., 0.),
             scissor_test_enabled: false,
             stencil_write_mask: (0, 0),
@@ -404,7 +406,7 @@ impl WebGLThread {
     #[allow(unsafe_code)]
     fn create_webgl_context(
         &mut self,
-        version: WebGLVersion,
+        webgl_version: WebGLVersion,
         requested_size: Size2D<u32>,
         attributes: GLContextAttributes,
     ) -> Result<(WebGLContextId, webgl::GLLimits), String> {
@@ -415,7 +417,7 @@ impl WebGLThread {
         self.bound_context_id = None;
 
         let context_attributes = &ContextAttributes {
-            version: version.to_surfman_version(),
+            version: webgl_version.to_surfman_version(),
             flags: attributes.to_surfman_context_attribute_flags(),
         };
 
@@ -508,17 +510,19 @@ impl WebGLThread {
         let texture_target = current_wr_texture_target(&self.device);
 
         let use_apple_vertex_array = WebGLImpl::needs_apple_vertex_arrays(gl_version);
-        let default_vao =
-            if let Some(vao) = WebGLImpl::create_vertex_array(&gl, use_apple_vertex_array) {
-                let vao = vao.get();
-                WebGLImpl::bind_vertex_array(&gl, vao, use_apple_vertex_array);
-                vao
-            } else {
-                0
-            };
+        let default_vao = if let Some(vao) =
+            WebGLImpl::create_vertex_array(&gl, use_apple_vertex_array, webgl_version)
+        {
+            let vao = vao.get();
+            WebGLImpl::bind_vertex_array(&gl, vao, use_apple_vertex_array, webgl_version);
+            vao
+        } else {
+            0
+        };
 
         let state = GLState {
             gl_version,
+            webgl_version,
             default_vao,
             ..Default::default()
         };
@@ -1382,26 +1386,18 @@ impl WebGLImpl {
             WebGLCommand::GenerateMipmap(target) => gl.generate_mipmap(target),
             WebGLCommand::CreateVertexArray(ref chan) => {
                 let use_apple_vertex_array = Self::needs_apple_vertex_arrays(state.gl_version);
-                let _ = chan.send(Self::create_vertex_array(gl, use_apple_vertex_array));
+                let id = Self::create_vertex_array(gl, use_apple_vertex_array, state.webgl_version);
+                let _ = chan.send(id);
             },
             WebGLCommand::DeleteVertexArray(id) => {
-                let ids = [id.get()];
                 let use_apple_vertex_array = Self::needs_apple_vertex_arrays(state.gl_version);
-                if use_apple_vertex_array {
-                    match gl {
-                        Gl::Gl(gl) => unsafe {
-                            gl.DeleteVertexArraysAPPLE(ids.len() as gl::GLsizei, ids.as_ptr());
-                        },
-                        Gl::Gles(_) => unimplemented!("No GLES on macOS"),
-                    }
-                } else {
-                    gl.delete_vertex_arrays(&ids)
-                }
+                let id = id.get();
+                Self::delete_vertex_array(gl, id, use_apple_vertex_array, state.webgl_version);
             },
             WebGLCommand::BindVertexArray(id) => {
                 let id = id.map_or(state.default_vao, WebGLVertexArrayId::get);
                 let use_apple_vertex_array = Self::needs_apple_vertex_arrays(state.gl_version);
-                Self::bind_vertex_array(gl, id, use_apple_vertex_array);
+                Self::bind_vertex_array(gl, id, use_apple_vertex_array, state.webgl_version);
             },
             WebGLCommand::GetParameterBool(param, ref sender) => {
                 let mut value = [0];
@@ -2003,20 +1999,25 @@ impl WebGLImpl {
     }
 
     #[allow(unsafe_code)]
-    fn create_vertex_array(gl: &Gl, use_apple_ext: bool) -> Option<WebGLVertexArrayId> {
-        let vao = if use_apple_ext {
-            match gl {
-                Gl::Gl(gl) => {
-                    let mut ids = vec![0];
-                    unsafe {
-                        gl.GenVertexArraysAPPLE(ids.len() as gl::GLsizei, ids.as_mut_ptr());
-                    }
-                    ids[0]
-                },
-                Gl::Gles(_) => unimplemented!("No GLES on macOS"),
-            }
-        } else {
-            gl.gen_vertex_arrays(1)[0]
+    fn create_vertex_array(
+        gl: &Gl,
+        use_apple_ext: bool,
+        version: WebGLVersion,
+    ) -> Option<WebGLVertexArrayId> {
+        let vao = match gl {
+            Gl::Gl(ref gl) if use_apple_ext => {
+                let mut ids = vec![0];
+                unsafe {
+                    gl.GenVertexArraysAPPLE(ids.len() as gl::GLsizei, ids.as_mut_ptr());
+                }
+                ids[0]
+            },
+            Gl::Gles(ref gles) if version == WebGLVersion::WebGL1 => {
+                let mut ids = vec![0];
+                unsafe { gles.GenVertexArraysOES(ids.len() as gl::GLsizei, ids.as_mut_ptr()) }
+                ids[0]
+            },
+            _ => gl.gen_vertex_arrays(1)[0],
         };
         if vao == 0 {
             let code = gl.get_error();
@@ -2028,16 +2029,30 @@ impl WebGLImpl {
     }
 
     #[allow(unsafe_code)]
-    fn bind_vertex_array(gl: &Gl, vao: GLuint, use_apple_ext: bool) {
-        if use_apple_ext {
-            match *gl {
-                Gl::Gl(ref gl) => unsafe {
-                    gl.BindVertexArrayAPPLE(vao);
-                },
-                Gl::Gles(_) => unimplemented!("No GLES on macOS"),
-            }
-        } else {
-            gl.bind_vertex_array(vao)
+    fn bind_vertex_array(gl: &Gl, vao: GLuint, use_apple_ext: bool, version: WebGLVersion) {
+        match gl {
+            Gl::Gl(ref gl) if use_apple_ext => unsafe {
+                gl.BindVertexArrayAPPLE(vao);
+            },
+            Gl::Gles(ref gles) if version == WebGLVersion::WebGL1 => unsafe {
+                gles.BindVertexArrayOES(vao);
+            },
+            _ => gl.bind_vertex_array(vao),
+        }
+        debug_assert_eq!(gl.get_error(), gl::NO_ERROR);
+    }
+
+    #[allow(unsafe_code)]
+    fn delete_vertex_array(gl: &Gl, vao: GLuint, use_apple_ext: bool, version: WebGLVersion) {
+        let vaos = [vao];
+        match gl {
+            Gl::Gl(ref gl) if use_apple_ext => unsafe {
+                gl.DeleteVertexArraysAPPLE(vaos.len() as gl::GLsizei, vaos.as_ptr());
+            },
+            Gl::Gles(ref gl) if version == WebGLVersion::WebGL1 => unsafe {
+                gl.DeleteVertexArraysOES(vaos.len() as gl::GLsizei, vaos.as_ptr());
+            },
+            _ => gl.delete_vertex_arrays(&vaos),
         }
         debug_assert_eq!(gl.get_error(), gl::NO_ERROR);
     }
