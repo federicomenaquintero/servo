@@ -720,8 +720,7 @@ impl WebGLThread {
         Some(id)
     }
 
-    /// Which access mode to uze
-    /// TODO: is this OK on all platforms?
+    /// Which access mode to use
     fn surface_access(&self) -> SurfaceAccess {
         SurfaceAccess::GPUOnly
     }
