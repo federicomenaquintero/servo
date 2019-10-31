@@ -816,7 +816,6 @@ impl WebGLRenderingContext {
     }
 
     pub(crate) fn layout_handle(&self) -> HTMLCanvasDataSource {
-        // WR using ExternalTexture requires a single update message.
         let image_key = self.webrender_image;
         HTMLCanvasDataSource::WebGL(image_key)
     }
