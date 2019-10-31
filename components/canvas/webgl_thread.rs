@@ -499,10 +499,12 @@ impl WebGLThread {
         debug_assert_eq!(gl.get_error(), gl::NO_ERROR);
 
         let descriptor = self.device.context_descriptor(&ctx);
-	let descriptor_attributes = self.device.context_descriptor_attributes(&descriptor);
+        let descriptor_attributes = self.device.context_descriptor_attributes(&descriptor);
 
         let gl_version = descriptor_attributes.version;
-        let has_alpha = descriptor_attributes.flags.contains(ContextAttributeFlags::ALPHA);
+        let has_alpha = descriptor_attributes
+            .flags
+            .contains(ContextAttributeFlags::ALPHA);
         let texture_target = current_wr_texture_target(&self.device);
 
         let use_apple_vertex_array = WebGLImpl::needs_apple_vertex_arrays(gl_version);
@@ -526,7 +528,7 @@ impl WebGLThread {
             };
 
         let state = GLState {
-	    gl_version,
+            gl_version,
             default_vao,
             ..Default::default()
         };
@@ -1896,9 +1898,7 @@ impl WebGLImpl {
     // array object functions, but support a set of APPLE extension functions that
     // provide VAO support instead.
     fn needs_apple_vertex_arrays(gl_version: GLVersion) -> bool {
-        cfg!(target_os = "macos") &&
-            !opts::get().headless &&
-            gl_version.major < 3
+        cfg!(target_os = "macos") && !opts::get().headless && gl_version.major < 3
     }
 
     #[allow(unsafe_code)]
@@ -2061,7 +2061,9 @@ impl WebGLImpl {
         );
         let requested_framebuffer = match request {
             WebGLFramebufferBindingRequest::Explicit(WebGLFramebufferId::Opaque(id)) => Some(id),
-            WebGLFramebufferBindingRequest::Explicit(WebGLFramebufferId::Transparent(_)) => return None,
+            WebGLFramebufferBindingRequest::Explicit(WebGLFramebufferId::Transparent(_)) => {
+                return None
+            },
             WebGLFramebufferBindingRequest::Default => None,
         };
         let attached_framebuffer = webxr_swap_chains
