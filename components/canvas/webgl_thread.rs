@@ -673,6 +673,7 @@ impl WebGLThread {
                 .unwrap();
 
             // TODO: if preserveDrawingBuffer is true, then blit the front buffer to the back buffer
+            // https://github.com/servo/servo/issues/24604
             debug!("Clearing {:?}", swap_id);
             swap_chain
                 .clear_surface(&mut self.device, &mut data.ctx, &*data.gl)
