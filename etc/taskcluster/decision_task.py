@@ -105,6 +105,8 @@ def mocked_only():
     windows_release()
     android_x86_wpt()
     linux_wpt()
+    magicleap_dev()
+    magicleap_nightly()
     decisionlib.DockerWorkerTask("Indexed by task definition").find_or_create()
 
 
