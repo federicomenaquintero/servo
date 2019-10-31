@@ -2061,7 +2061,7 @@ impl WebGLImpl {
         );
         let requested_framebuffer = match request {
             WebGLFramebufferBindingRequest::Explicit(WebGLFramebufferId::Opaque(id)) => Some(id),
-            WebGLFramebufferBindingRequest::Explicit(WebGLFramebufferId::Transparent(_)) => None?,
+            WebGLFramebufferBindingRequest::Explicit(WebGLFramebufferId::Transparent(_)) => return None,
             WebGLFramebufferBindingRequest::Default => None,
         };
         let attached_framebuffer = webxr_swap_chains
@@ -2076,7 +2076,7 @@ impl WebGLImpl {
             .map(WebGLOpaqueFramebufferId::WebXR)
             .next();
         if requested_framebuffer == attached_framebuffer {
-            None?;
+            return None;
         }
         let requested_swap_chain = match requested_framebuffer {
             Some(WebGLOpaqueFramebufferId::WebXR(id)) => webxr_swap_chains.get(id)?,
