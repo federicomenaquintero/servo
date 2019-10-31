@@ -1012,9 +1012,6 @@ where
     W: WindowMethods + 'static + ?Sized,
 {
     // Create a `surfman` device and context.
-    //
-    // FIXME(pcwalton): The `NoopContextReleaser` is an unsafe hack to get around the fact that
-    // Glutin doesn't provide an obvious way to reference count windows.
     window.make_gl_context_current();
 
     #[cfg(not(target_os = "windows"))]
