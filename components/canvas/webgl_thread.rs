@@ -79,6 +79,7 @@ struct GLContextData {
 }
 
 pub struct GLState {
+    gl_version: GLVersion,
     clear_color: (f32, f32, f32, f32),
     scissor_test_enabled: bool,
     stencil_write_mask: (u32, u32),
@@ -91,6 +92,7 @@ pub struct GLState {
 impl Default for GLState {
     fn default() -> GLState {
         GLState {
+            gl_version: GLVersion { major: 1, minor: 0 },
             clear_color: (0., 0., 0., 0.),
             scissor_test_enabled: false,
             stencil_write_mask: (0, 0),
@@ -497,14 +499,13 @@ impl WebGLThread {
         debug_assert_eq!(gl.get_error(), gl::NO_ERROR);
 
         let descriptor = self.device.context_descriptor(&ctx);
-        let has_alpha = self
-            .device
-            .context_descriptor_attributes(&descriptor)
-            .flags
-            .contains(ContextAttributeFlags::ALPHA);
+	let descriptor_attributes = self.device.context_descriptor_attributes(&descriptor);
+
+        let gl_version = descriptor_attributes.version;
+        let has_alpha = descriptor_attributes.flags.contains(ContextAttributeFlags::ALPHA);
         let texture_target = current_wr_texture_target(&self.device);
 
-        let use_apple_vertex_array = WebGLImpl::needs_apple_vertex_arrays(&self.device, &ctx);
+        let use_apple_vertex_array = WebGLImpl::needs_apple_vertex_arrays(gl_version);
         let default_vao =
             if let Some(vao) = WebGLImpl::create_vertex_array(&gl, use_apple_vertex_array) {
                 let vao = vao.get();
@@ -525,6 +526,7 @@ impl WebGLThread {
             };
 
         let state = GLState {
+	    gl_version,
             default_vao,
             ..Default::default()
         };
@@ -1387,12 +1389,12 @@ impl WebGLImpl {
             WebGLCommand::Flush => gl.flush(),
             WebGLCommand::GenerateMipmap(target) => gl.generate_mipmap(target),
             WebGLCommand::CreateVertexArray(ref chan) => {
-                let use_apple_vertex_array = Self::needs_apple_vertex_arrays(device, ctx);
+                let use_apple_vertex_array = Self::needs_apple_vertex_arrays(state.gl_version);
                 let _ = chan.send(Self::create_vertex_array(gl, use_apple_vertex_array));
             },
             WebGLCommand::DeleteVertexArray(id) => {
                 let ids = [id.get()];
-                let use_apple_vertex_array = Self::needs_apple_vertex_arrays(device, ctx);
+                let use_apple_vertex_array = Self::needs_apple_vertex_arrays(state.gl_version);
                 if use_apple_vertex_array {
                     match gl {
                         Gl::Gl(gl) => unsafe {
@@ -1406,7 +1408,7 @@ impl WebGLImpl {
             },
             WebGLCommand::BindVertexArray(id) => {
                 let id = id.map_or(state.default_vao, WebGLVertexArrayId::get);
-                let use_apple_vertex_array = Self::needs_apple_vertex_arrays(device, ctx);
+                let use_apple_vertex_array = Self::needs_apple_vertex_arrays(state.gl_version);
                 if use_apple_vertex_array {
                     match gl {
                         Gl::Gl(gl) => unsafe {
@@ -1893,16 +1895,10 @@ impl WebGLImpl {
     // OpenGL 2 support is requested. Legacy contexts return GL errors for the vertex
     // array object functions, but support a set of APPLE extension functions that
     // provide VAO support instead.
-    fn needs_apple_vertex_arrays(device: &Device, ctx: &Context) -> bool {
+    fn needs_apple_vertex_arrays(gl_version: GLVersion) -> bool {
         cfg!(target_os = "macos") &&
             !opts::get().headless &&
-            Self::gl_version(device, ctx).major < 3
-    }
-
-    fn gl_version(device: &Device, ctx: &Context) -> GLVersion {
-        let descriptor = device.context_descriptor(ctx);
-        let attributes = device.context_descriptor_attributes(&descriptor);
-        attributes.version
+            gl_version.major < 3
     }
 
     #[allow(unsafe_code)]
