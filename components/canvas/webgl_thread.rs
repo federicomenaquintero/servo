@@ -353,21 +353,34 @@ impl WebGLThread {
         );
 
         if let Some(data) = data {
-            // We have to handle framebuffer binding differently, because `apply`
-            // assumes that the currently attached surface is the right one for binding
-            // the framebuffer, and since it doesn't get passed the swap buffers
-            // it casn't do that itself. At some point we could refactor apply so
-            // it takes a self parameter, at which point that won't be necessary.
-            if let WebGLCommand::BindFramebuffer(_, request) = command {
-                WebGLImpl::attach_surface(
-                    context_id,
-                    &self.webrender_swap_chains,
-                    &self.webxr_swap_chains,
-                    request,
-                    &mut data.ctx,
-                    &mut self.device,
-                );
+            match command {
+                // We have to handle framebuffer binding differently, because `apply`
+                // assumes that the currently attached surface is the right one for binding
+                // the framebuffer, and since it doesn't get passed the swap buffers
+                // it casn't do that itself. At some point we could refactor apply so
+                // it takes a self parameter, at which point that won't be necessary.
+                WebGLCommand::BindFramebuffer(_, request) => {
+                    WebGLImpl::attach_surface(
+                        context_id,
+                        &self.webrender_swap_chains,
+                        &self.webxr_swap_chains,
+                        request,
+                        &mut data.ctx,
+                        &mut self.device,
+                    );
+                },
+                // Similarly, dropping a WebGL framebuffer needs accesso the swap chains,
+                // in order to delete the entry.
+                WebGLCommand::DeleteFramebuffer(WebGLFramebufferId::Opaque(
+                    WebGLOpaqueFramebufferId::WebXR(id),
+                )) => {
+                    let _ = self
+                        .webxr_swap_chains
+                        .destroy(id, &mut self.device, &mut data.ctx);
+                },
+                _ => {},
             }
+
             WebGLImpl::apply(
                 &self.device,
                 &data.ctx,
@@ -1182,11 +1195,7 @@ impl WebGLImpl {
             WebGLCommand::DeleteFramebuffer(WebGLFramebufferId::Transparent(id)) => {
                 gl.delete_framebuffers(&[id.get()])
             },
-            WebGLCommand::DeleteFramebuffer(WebGLFramebufferId::Opaque(
-                WebGLOpaqueFramebufferId::WebXR(_),
-            )) => {
-                // TODO: deleting a WebXR framebuffer (which happens when the framebuffer is GCd)
-            },
+            WebGLCommand::DeleteFramebuffer(WebGLFramebufferId::Opaque(_)) => {},
             WebGLCommand::DeleteRenderbuffer(id) => gl.delete_renderbuffers(&[id.get()]),
             WebGLCommand::DeleteTexture(id) => gl.delete_textures(&[id.get()]),
             WebGLCommand::DeleteProgram(id) => gl.delete_program(id.get()),
