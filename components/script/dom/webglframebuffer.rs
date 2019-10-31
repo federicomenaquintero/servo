@@ -129,6 +129,7 @@ impl WebGLFramebuffer {
     }
 
     // TODO: depth, stencil and alpha
+    // https://github.com/servo/servo/issues/24498
     pub fn maybe_new_webxr(
         session: &XRSession,
         context: &WebGLRenderingContext,
