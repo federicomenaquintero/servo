@@ -16,17 +16,18 @@ def main(task_for):
             branch if not branch.startswith("try-") else "try"
         )
 
+
+    # Implemented but disabled for now:
+    linux_wpt = lambda: None  # Shadows the existing top-level function
+    # The magicleap build is broken until there's a surfman back end
+    magicleap_dev = lambda: None
+    magicleap_nightly = lambda: None
+
     if task_for == "github-push":
         # FIXME https://github.com/servo/servo/issues/22187
         # In-emulator testing is disabled for now. (Instead we only compile.)
         # This local variable shadows the module-level function of the same name.
         android_x86_wpt = android_x86_release
-
-        # Implemented but disabled for now:
-        linux_wpt = lambda: None  # Shadows the existing top-level function
-        # The magicleap build is broken until there's a surfman back end
-        magicleap_dev = lambda: None
-        magicleap_nightly = lambda: None
 
         all_tests = [
             linux_tidy_unit_docs,
