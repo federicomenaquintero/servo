@@ -972,8 +972,8 @@ impl WebGLImpl {
     ) {
         debug!("WebGLImpl::apply({:?})", command);
 
-        let error = gl.get_error();
-        assert_eq!(error, gl::NO_ERROR);
+        // Ensure there are no pending GL errors from other parts of the pipeline.
+        debug_assert_eq!(gl.get_error(), gl::NO_ERROR);
 
         match command {
             WebGLCommand::GetContextAttributes(ref sender) => sender.send(*attributes).unwrap(),
@@ -1705,38 +1705,36 @@ impl WebGLImpl {
             },
         }
 
-        // TODO: update test expectations in order to enable debug assertions
-        let error = gl.get_error();
-        if error != gl::NO_ERROR {
-            error!("Last GL operation failed: {:?}", command);
-            if error == gl::INVALID_FRAMEBUFFER_OPERATION {
-                let mut framebuffer_bindings = [0];
-                unsafe {
-                    gl.get_integer_v(gl::DRAW_FRAMEBUFFER_BINDING, &mut framebuffer_bindings);
+        // If debug asertions are enabled, then check the error state.
+        #[cfg(debug_assertions)]
+        {
+            let error = gl.get_error();
+            if error != gl::NO_ERROR {
+                error!("Last GL operation failed: {:?}", command);
+                if error == gl::INVALID_FRAMEBUFFER_OPERATION {
+                    let mut framebuffer_bindings = [0];
+                    unsafe {
+                        gl.get_integer_v(gl::DRAW_FRAMEBUFFER_BINDING, &mut framebuffer_bindings);
+                    }
+                    debug!(
+                        "(thread {:?}) Current draw framebuffer binding: {}",
+                        ::std::thread::current().id(),
+                        framebuffer_bindings[0]
+                    );
                 }
-                debug!(
-                    "(thread {:?}) Current draw framebuffer binding: {}",
-                    ::std::thread::current().id(),
-                    framebuffer_bindings[0]
+                #[cfg(feature = "webgl_backtrace")]
+                {
+                    error!("Backtrace from failed WebGL API:\n{}", _backtrace.backtrace);
+                    if let Some(backtrace) = _backtrace.js_backtrace {
+                        error!("JS backtrace from failed WebGL API:\n{}", backtrace);
+                    }
+                }
+                panic!(
+                    "Unexpected WebGL error: 0x{:x} ({}) [{:?}]",
+                    error, error, command
                 );
             }
-            #[cfg(feature = "webgl_backtrace")]
-            {
-                error!("Backtrace from failed WebGL API:\n{}", _backtrace.backtrace);
-                if let Some(backtrace) = _backtrace.js_backtrace {
-                    error!("JS backtrace from failed WebGL API:\n{}", backtrace);
-                }
-            }
         }
-
-        assert_eq!(
-            error,
-            gl::NO_ERROR,
-            "Unexpected WebGL error: 0x{:x} ({}) [{:?}]",
-            error,
-            error,
-            command
-        );
     }
 
     fn initialize_framebuffer(gl: &Gl, state: &GLState, color: bool, depth: bool, stencil: bool) {
