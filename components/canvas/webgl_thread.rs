@@ -262,8 +262,7 @@ impl WebGLThread {
                             .cached_context_info
                             .get_mut(&id)
                             .expect("Where's the cached context info?")
-                            .image_key
-                            .expect("Where's the WebRender image key?");
+                            .image_key;
 
                         let data = Self::make_current_if_needed(
                             &self.device,
@@ -534,12 +533,8 @@ impl WebGLThread {
             texture_target,
         );
 
-        self.cached_context_info.insert(
-            id,
-            WebGLContextInfo {
-                image_key: Some(image_key),
-            },
-        );
+        self.cached_context_info
+            .insert(id, WebGLContextInfo { image_key });
 
         Ok((id, limits))
     }
@@ -583,23 +578,21 @@ impl WebGLThread {
 
         // Update WR image if needed.
         let info = self.cached_context_info.get_mut(&context_id).unwrap();
-        if let Some(image_key) = info.image_key {
-            let context_descriptor = self.device.context_descriptor(&data.ctx);
-            let has_alpha = self
-                .device
-                .context_descriptor_attributes(&context_descriptor)
-                .flags
-                .contains(ContextAttributeFlags::ALPHA);
-            let texture_target = current_wr_texture_target(&self.device);
-            Self::update_wr_external_image(
-                &self.webrender_api,
-                size.to_i32(),
-                has_alpha,
-                context_id,
-                image_key,
-                texture_target,
-            );
-        }
+        let context_descriptor = self.device.context_descriptor(&data.ctx);
+        let has_alpha = self
+            .device
+            .context_descriptor_attributes(&context_descriptor)
+            .flags
+            .contains(ContextAttributeFlags::ALPHA);
+        let texture_target = current_wr_texture_target(&self.device);
+        Self::update_wr_external_image(
+            &self.webrender_api,
+            size.to_i32(),
+            has_alpha,
+            context_id,
+            info.image_key,
+            texture_target,
+        );
 
         debug_assert_eq!(data.gl.get_error(), gl::NO_ERROR);
 
@@ -611,11 +604,7 @@ impl WebGLThread {
         // Release webrender image keys.
         if let Some(info) = self.cached_context_info.remove(&context_id) {
             let mut txn = webrender_api::Transaction::new();
-
-            if let Some(image_key) = info.image_key {
-                txn.delete_image(image_key);
-            }
-
+            txn.delete_image(info.image_key);
             self.webrender_api.update_resources(txn.resource_updates)
         }
 
@@ -948,7 +937,7 @@ impl Drop for WebGLThread {
 /// Helper struct to store cached WebGLContext information.
 struct WebGLContextInfo {
     /// Currently used WebRender image key.
-    image_key: Option<webrender_api::ImageKey>,
+    image_key: webrender_api::ImageKey,
 }
 
 // TODO(pcwalton): Add `GL_TEXTURE_EXTERNAL_OES`?
