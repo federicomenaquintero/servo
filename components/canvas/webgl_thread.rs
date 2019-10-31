@@ -511,17 +511,7 @@ impl WebGLThread {
         let default_vao =
             if let Some(vao) = WebGLImpl::create_vertex_array(&gl, use_apple_vertex_array) {
                 let vao = vao.get();
-                if use_apple_vertex_array {
-                    match *gl {
-                        Gl::Gl(ref gl) => unsafe {
-                            gl.BindVertexArrayAPPLE(vao);
-                        },
-                        Gl::Gles(_) => unimplemented!("No GLES on macOS"),
-                    }
-                } else {
-                    gl.bind_vertex_array(vao)
-                }
-                debug_assert_eq!(gl.get_error(), gl::NO_ERROR);
+                WebGLImpl::bind_vertex_array(&gl, vao, use_apple_vertex_array);
                 vao
             } else {
                 0
@@ -1411,16 +1401,7 @@ impl WebGLImpl {
             WebGLCommand::BindVertexArray(id) => {
                 let id = id.map_or(state.default_vao, WebGLVertexArrayId::get);
                 let use_apple_vertex_array = Self::needs_apple_vertex_arrays(state.gl_version);
-                if use_apple_vertex_array {
-                    match gl {
-                        Gl::Gl(gl) => unsafe {
-                            gl.BindVertexArrayAPPLE(id);
-                        },
-                        Gl::Gles(_) => unimplemented!("No GLES on macOS"),
-                    }
-                } else {
-                    gl.bind_vertex_array(id)
-                }
+                Self::bind_vertex_array(gl, id, use_apple_vertex_array);
             },
             WebGLCommand::GetParameterBool(param, ref sender) => {
                 let mut value = [0];
@@ -2044,6 +2025,21 @@ impl WebGLImpl {
         } else {
             Some(unsafe { WebGLVertexArrayId::new(vao) })
         }
+    }
+
+    #[allow(unsafe_code)]
+    fn bind_vertex_array(gl: &Gl, vao: GLuint, use_apple_ext: bool) {
+        if use_apple_ext {
+            match *gl {
+                Gl::Gl(ref gl) => unsafe {
+                    gl.BindVertexArrayAPPLE(vao);
+                },
+                Gl::Gles(_) => unimplemented!("No GLES on macOS"),
+            }
+        } else {
+            gl.bind_vertex_array(vao)
+        }
+        debug_assert_eq!(gl.get_error(), gl::NO_ERROR);
     }
 
     /// Updates the swap buffers if the context surface needs to be changed
