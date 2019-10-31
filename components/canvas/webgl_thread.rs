@@ -581,8 +581,7 @@ impl WebGLThread {
         // Reset framebuffer bindings as appropriate.
         framebuffer_rebinding_info.apply(&self.device, &data.ctx, &*data.gl);
 
-        // Update WR image if needed. Resize image updates are only required for SharedTexture mode.
-        // Readback mode already updates the image every frame to send the raw pixels.
+        // Update WR image if needed.
         let info = self.cached_context_info.get_mut(&context_id).unwrap();
         if let Some(image_key) = info.image_key {
             let context_descriptor = self.device.context_descriptor(&data.ctx);
