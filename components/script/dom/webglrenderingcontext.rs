@@ -2237,7 +2237,7 @@ impl WebGLRenderingContextMethods for WebGLRenderingContext {
                     WebGLFramebufferBindingRequest::Default
                 ))
             );
-            framebuffer.delete(false);
+            framebuffer.delete(false)
         }
     }
 
