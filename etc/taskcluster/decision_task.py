@@ -587,15 +587,14 @@ def macos_release_build(args=""):
     return (
         macos_build_task("Release build")
         .with_treeherder("macOS x64", "Release")
-        .with_script(" ".join([
-            "./mach build --release --verbose",
-            args,
+        .with_script("\n".join([
+            "./mach build --release --verbose " + args,
             "./etc/ci/lockfile_changed.sh",
-            "tar -czf target.tar.gz",
-                "target/release/servo",
-                "target/release/build/osmesa-src-*/output",
-                "target/release/build/osmesa-src-*/out/src/gallium/targets/osmesa/.libs",
-                "target/release/build/osmesa-src-*/out/src/mapi/shared-glapi/.libs",
+            "tar -czf target.tar.gz" +
+            " target/release/servo" +
+            " target/release/build/osmesa-src-*/output" +
+            " target/release/build/osmesa-src-*/out/src/gallium/targets/osmesa/.libs" +
+            " target/release/build/osmesa-src-*/out/src/mapi/shared-glapi/.libs",
         ]))
         .with_artifacts("repo/target.tar.gz")
         .find_or_create("build.macos_x64_release." + CONFIG.task_id())
