@@ -91,6 +91,9 @@ def main(task_for):
                 "master": [
                     upload_docs,
                 ],
+                "try-taskcluster": [
+                    macos_wpt,
+                ],
             }
         for function in by_branch_name.get(branch, []):
             function()
