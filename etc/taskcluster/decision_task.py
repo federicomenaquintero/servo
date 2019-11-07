@@ -91,6 +91,9 @@ def main(task_for):
                 "master": [
                     upload_docs,
                 ],
+                "try-bug1593543": [
+                    linux_tidy_unit
+                ],
             }
         for function in by_branch_name.get(branch, []):
             function()
@@ -772,7 +775,7 @@ def dockerfile_path(name):
 def linux_task(name):
     return (
         decisionlib.DockerWorkerTask(name)
-        .with_worker_type("servo-docker-worker" if CONFIG.legacy_tc_deployment else "docker")
+        .with_worker_type("servo-docker-worker" if CONFIG.legacy_tc_deployment else "tmp-docker")
         .with_treeherder_required()
     )
 
