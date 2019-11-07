@@ -84,12 +84,12 @@ impl Backend for RaqoteBackend {
 
 impl<'a> CanvasPaintState<'a> {
     pub fn new(_antialias: AntialiasMode) -> CanvasPaintState<'a> {
-        let solid_src = raqote::SolidSource {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        };
+        let solid_src = raqote::SolidSource::from_unpremultiplied_argb(
+            255,
+            0,
+            0,
+            0,
+        );
         CanvasPaintState {
             draw_options: DrawOptions::Raqote(raqote::DrawOptions::new()),
             fill_style: Pattern::Raqote(raqote::Source::Solid(solid_src)),
@@ -99,12 +99,12 @@ impl<'a> CanvasPaintState<'a> {
             shadow_offset_x: 0.0,
             shadow_offset_y: 0.0,
             shadow_blur: 0.0,
-            shadow_color: Color::Raqote(raqote::SolidSource {
-                r: 0,
-                g: 0,
-                b: 0,
-                a: 0,
-            }),
+            shadow_color: Color::Raqote(raqote::SolidSource::from_unpremultiplied_argb(
+                0,
+                0,
+                0,
+                0,
+            )),
         }
     }
 }
@@ -187,8 +187,11 @@ impl Path {
         ))))
     }
 
-    pub fn contains_point(&self, x: f64, y: f64, _path_transform: &Transform2D<f32>) -> bool {
-        self.as_raqote().contains_point(0.1, x as f32, y as f32)
+    pub fn contains_point(&self, x: f64, y: f64, path_transform: &Transform2D<f32>) -> bool {
+        self.as_raqote()
+            .clone()
+            .transform(path_transform)
+            .contains_point(0.1, x as f32, y as f32)
     }
 
     pub fn copy_to_builder(&self) -> Box<dyn GenericPathBuilder> {
@@ -218,12 +221,12 @@ impl GenericDrawTarget for raqote::DrawTarget {
         raqote::DrawTarget::fill(
             self,
             &pb.finish(),
-            &raqote::Source::Solid(raqote::SolidSource {
-                r: 0,
-                g: 0,
-                b: 0,
-                a: 0,
-            }),
+            &raqote::Source::Solid(raqote::SolidSource::from_unpremultiplied_argb(
+                0,
+                0,
+                0,
+                0,
+            )),
             &options,
         );
     }
@@ -285,7 +288,7 @@ impl GenericDrawTarget for raqote::DrawTarget {
             data: unsafe {
                 std::slice::from_raw_parts(
                     v.as_ptr() as *const u32,
-                    v.len() * std::mem::size_of::<u8>(),
+                    v.len() / std::mem::size_of::<u32>(),
                 )
             },
         };
@@ -561,21 +564,18 @@ impl GenericPathBuilder for PathBuilder {
         }
     }
 
-    fn get_current_point(&mut self) -> Point2D<f32> {
+    fn get_current_point(&mut self) -> Option<Point2D<f32>> {
         let path = self.finish();
+        self.0 = Some(path.as_raqote().clone().into());
 
-        for op in path.as_raqote().ops.iter().rev() {
-            match op {
-                PathOp::MoveTo(point) | PathOp::LineTo(point) => {
-                    return Point2D::new(point.x, point.y)
-                },
-                PathOp::CubicTo(_, _, point) => return Point2D::new(point.x, point.y),
-                PathOp::QuadTo(_, point) => return Point2D::new(point.x, point.y),
-                PathOp::Close => {},
-            };
-        }
-        panic!("dead end");
+        path.as_raqote().ops.iter().last().and_then(|op| match op {
+            PathOp::MoveTo(point) | PathOp::LineTo(point) => Some(Point2D::new(point.x, point.y)),
+            PathOp::CubicTo(_, _, point) => Some(Point2D::new(point.x, point.y)),
+            PathOp::QuadTo(_, point) => Some(Point2D::new(point.x, point.y)),
+            PathOp::Close => None,
+        })
     }
+
     fn line_to(&mut self, point: Point2D<f32>) {
         self.0.as_mut().unwrap().line_to(point.x, point.y);
     }
@@ -652,12 +652,12 @@ impl<'a> ToRaqoteSource<'a> for FillOrStrokeStyle {
         use canvas_traits::canvas::FillOrStrokeStyle::*;
 
         match self {
-            Color(rgba) => Some(raqote::Source::Solid(raqote::SolidSource {
-                r: rgba.red,
-                g: rgba.green,
-                b: rgba.blue,
-                a: rgba.alpha,
-            })),
+            Color(rgba) => Some(raqote::Source::Solid(raqote::SolidSource::from_unpremultiplied_argb(
+                rgba.alpha,
+                rgba.red,
+                rgba.green,
+                rgba.blue,
+            ))),
             LinearGradient(style) => {
                 let stops = style.stops.into_iter().map(|s| s.to_raqote()).collect();
                 let gradient = raqote::Gradient { stops };
@@ -715,12 +715,12 @@ impl ToRaqoteStyle for RGBA {
     type Target = raqote::SolidSource;
 
     fn to_raqote_style(self) -> Self::Target {
-        raqote::SolidSource {
-            r: self.red,
-            g: self.green,
-            b: self.blue,
-            a: self.alpha,
-        }
+        raqote::SolidSource::from_unpremultiplied_argb(
+            self.alpha,
+            self.red,
+            self.green,
+            self.blue,
+        )
     }
 }
 
